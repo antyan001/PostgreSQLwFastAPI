@@ -136,6 +136,57 @@ stdout, stderr = process.communicate()
 ```
 Wait for new data written to Redis cache and repeat all above-mentioned steps again.
 
+## Serving PostgreSQL Database with REST API:
+He we demonstrate the how to use developed Async CRUD (Create, Read, Update, and Delete) APIs using FastAPI functionality.\
+
+MAIN REST script: ``service.py``
+
+Fetch N rows from `sample_us_users` table uploaded at previous steps.
+* --> *[GET]*: `http://65.108.60.87:8003/sample_us_users/?skip=0&take=5`
+```python
+cmd = 'curl -X GET http://65.108.60.87:8003/sample_us_users/?skip=0&take=5'
+args = shlex.split(cmd)
+process = subprocess.Popen(args, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+stdout, stderr = process.communicate()
+
+out_str = stdout.decode("utf-8").split("content-type: application/json")[-1].strip()
+
+json.loads(out_str)
+
+[{'id': '3d4880db-8c73-4eb7-b0ec-d9c96d82dfab',
+  'address': '{"city": "Sidney", "state": "Ohio", "country": "US", "postCode": "59270"}',
+  'inserted_at': '2020-05-03T15:34:29.504000'},
+ {'id': '472a0f40-fe20-4ee9-95aa-79cf5117f9ab',
+  'address': '{"city": "Willingboro", "state": "New Jersey", "country": "US", "postCode": "08046"}',
+  'inserted_at': '2020-03-14T23:41:04.324000'},
+ {'id': '6338b020-b11f-491c-b1dc-5b3f8a980ef4',
+  'address': '{"city": "Brenham", "state": "Texas", "country": "US", "postCode": "77833"}',
+  'inserted_at': '2020-08-05T00:52:59.571000'},
+ {'id': '6fe74d9f-5cb8-4be4-b02d-535df184fd63',
+  'address': '{"city": "Addison", "state": "Illinois", "country": "US", "postCode": "60101"}',
+  'inserted_at': '2019-05-07T18:14:56.131000'},
+ {'id': 'd7c3e38c-77e2-4336-9803-cc264ee136c1',
+  'address': '{"city": "Las Vegas", "state": "Nevada", "country": "US", "postCode": "89135"}',
+  'inserted_at': '2020-06-01T21:35:16.507000'}]
+``` 
+
+Get a single Row given its Id via cURL using GET
+* --> *[GET]*: `http://65.108.60.87:8003/sample_us_users/867a9975-cbd5-43dc-b3c9-49a4eddb870f/`
+```python
+cmd = 'curl -X GET http://65.108.60.87:8003/sample_us_users/867a9975-cbd5-43dc-b3c9-49a4eddb870f/'
+args = shlex.split(cmd)
+process = subprocess.Popen(args, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+stdout, stderr = process.communicate()
+
+out_str = stdout.decode("utf-8").split("content-type: application/json")[-1].strip()
+
+json.loads(out_str)
+
+{'id': '867a9975-cbd5-43dc-b3c9-49a4eddb870f',
+ 'address': '{"city": "Riverdale", "state": "Georgia", "country": "US", "postCode": "30274"}',
+ 'inserted_at': '2020-07-15T16:57:53.897000'}
+```
+
 ## GUNICORN support
 Finally we used here a `GUNICORN` server for load balancing with 4 workers and 4 threads each with the full support of Graceful Shutdown and Graceful Reload.
 Service side is propotyped on the base of: 
