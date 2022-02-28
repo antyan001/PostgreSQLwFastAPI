@@ -136,6 +136,11 @@ stdout, stderr = process.communicate()
 ```
 Wait for new data written to Redis cache and repeat all above-mentioned steps again.
 
+## PostgreSQL monitoring: running Pgadmin on Virtual Server 
+One can try to install pgAdmin in Ubuntu by running the following script: `install_pgadmin.sh`
+After configure and establishing a connection to PostgreSQL under created user `anthony`  one can run some query in Postgres Query Editor:
+![pgAdmin](./img/pgadmin.png)
+
 ## Serving PostgreSQL Database with REST API:
 He we demonstrate the how to use developed Async CRUD (Create, Read, Update, and Delete) APIs using FastAPI functionality.\
 
