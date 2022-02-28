@@ -138,7 +138,8 @@ Wait for new data written to Redis cache and repeat all above-mentioned steps ag
 
 ## PostgreSQL monitoring: running Pgadmin on Virtual Server 
 One can try to install pgAdmin in Ubuntu by running the following script: `install_pgadmin.sh`\
-Next step is to configure and establish a connection to PostgreSQL via pgadmin GUI under created user (the user that was created at the final steps of Postgres configuration by running command `sudo su - postgres -c "createuser -P -s -e $USER"`) 
+Next step is to configure and establish a connection to PostgreSQL via `pgadmin` GUI under created user: the user that was created at the final steps of Postgres configuration by running command\
+`sudo su - postgres -c "createuser -P -s -e $USER"`\
 After all configuraiton steps are complited one can run some query in Postgres QEditor :
 ![pgAdmin](./img/pgadmin.png)
 
