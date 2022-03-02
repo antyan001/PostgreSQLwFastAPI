@@ -1,10 +1,13 @@
 # ETL PyProject for NearRealTime(NRT) Data Stream Pipeline with PostGreSQL DB as backend and FastAPI with Async REST Endpoints
 
 *PROJECT STRUCTURE*:
-- `install_postgres.sh`: script for installing and configuring `PostgreSQL` DB on Ubuntu 
+- `install_postgres.sh`: silent auto-installer `PostgreSQL` DB on Ubuntu (non-dockerized)
+- `install_pgadmin.sh`: silent `pgadmin4` auto-installer on Ubuntu (non-dockerized)
 - `redis2postgres_insert.py`: py-script with connection to Postgres and implemented parallel loading of data rows being fetched from Redis cache 
-- `service.py`: MAIN `FastAPI` async service running under uvicorn `ASGI` Web server providing async endpoints to fetch/modify/delete rows from PostgreSQL 
-- `run.sh` : shell script for serving REST Endpoints under `Gunicorn` server producing load balancing with N workers and N threads  
+- `service.py`: MAIN `FastAPI` async service running under `uvicorn` `ASGI` Web server providing async endpoints to fetch/modify/delete rows from PostgreSQL 
+- `run_pg.sh`:  dockerized script for installing and auto-configuring `PosrgreSQL` DB in Docker container 
+- `run_pg_server_conf.sh`: shell script with `posrgres` configuration instructions that will be executed inside the running docker container 
+- `run_serv.sh` : shell script for serving REST Endpoints under `Gunicorn` server producing load balancing with N workers and N threads  
 - `/src/`
   - **./loader.py**: class with Postgres DB connection and build-in getter/loader methods for working with data rows 
   in parallel/nonparallel batch modes  
@@ -12,15 +15,18 @@
 ### Virtual Machines
 Hosted virtual machines with installed databases (Redis/Postgres) and running microservises:
 ![virtual machines](./img/virt_machines.png)
-Here Redis DB is located on one remote host and PostgreSQL is located in another remote machine.
+Here Redis DB is located on one remote host and PostgreSQL is located in another remote machine (postgres server can be running in relevant docker container or 
+just simply installed on remote host as it's up to user).
 
 ### MAIN PROJECT DESCRIPTION
 This project is considered as a continuation from previous implementation [RedisETL with Async FastAPI](https://github.com/antyan001/RedisETL) using predominately Redis DB for fast caching data at the backend.  
 Hereafter we set up and run an instance of PostGres DB to catch data from key-val Redis cache and sore ones in prepared relation DB.
-First we should connect to our DB name `etldb` with created user `anthony` having all grants as shown on the following picture: 
+
+### Install PostgreSQL directly on user host (without Docker image)
+Simply run shell script `install_postgres.sh`
+Check the installation results by connecting to our DB name `etldb` with created user `anthony` having all grants as shown on the following picture: 
 ```postgresql
 root@kcloud-production-user-136-vm-180:~/PostgresSQL# sudo -u postgres psql -c '\l'
-could not change directory to "/root/PostgresSQL": Permission denied
                                   List of databases
    Name    |  Owner   | Encoding |   Collate   |    Ctype    |   Access privileges   
 -----------+----------+----------+-------------+-------------+-----------------------
@@ -34,6 +40,45 @@ could not change directory to "/root/PostgresSQL": Permission denied
            |          |          |             |             | postgres=CTc/postgres
 (4 rows)
 ```
+
+### Dockerized installation of PostgreSQL on user host from Docker image
+Simply run shell script `run_pg.sh` which uses instructions from inplace `Docker` file
+Dive into running docker container (hereafter docker container is called `pg_image`) 
+```python
+docker_id="$(docker ps -a | grep -E "pg_image*" | awk '{print $1}' | xargs)"; docker exec -it $docker_id bash
+```
+Configure your `pg_hba.conf` file to resolve db connections from remote white hosts:
+```sqlite
+echo "listen_addresses = '*'" >> /etc/postgresql/12/main/postgresql.conf
+echo "host    all             all             65.108.60.0/24          md5" >> /etc/postgresql/12/main/pg_hba.conf
+echo "host    all             all             172.17.0.0/24           md5" >> /etc/postgresql/12/main/pg_hba.conf
+```
+Set executable permissions to file `redis2postgres_insert.py` and run script with appropriate flags 
+for inserting data from Redis to Postgres: 
+```python
+root@2594b01cd3aa:/app# chmod u+x redis2postgres_insert.py
+root@2594b01cd3aa:/app# ./redis2postgres_insert.py -table="$TBL0" --parallel=True
+```
+Main script `redis2postgres_insert.py` for communicating with PostGreSQL should be run in the following way:
+```
+./redis2postgres_insert.py -table=[TBL_NAME] -parallel=[True|False]
+```
+Appropriate variables `$TBL{}` with table names are declared in `config0.env` file. Run our loader in parallel mode and see output results: 
+```python
+root@2594b01cd3aa:/app# ./redis2postgres_insert.py -table="$TBL0" -parallel=True
+2.9.3 (dt dec pq3 ext lo64)
+('PostgreSQL 12.10 (Ubuntu 12.10-1.pgdg18.04+1) on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 7.5.0-3ubuntu1~18.04) 7.5.0, 64-bit',)
+[Parallel(n_jobs=5)]: Using backend LokyBackend with 5 concurrent workers.
+Pushed 508 lines 
+Pushed 508 lines 
+Pushed 508 lines 
+Pushed 3 lines 
+[Parallel(n_jobs=5)]: Done   4 out of   6 | elapsed:    3.4s remaining:    1.7s
+Pushed 508 lines 
+Pushed 508 lines 
+[Parallel(n_jobs=5)]: Done   6 out of   6 | elapsed:    4.7s finished
+```
+### Data Loading process explanation.
 Main class for PostgreSQL connection is implemented in script `loader.py`
 ```python
 class PostGresDB(object):
@@ -80,18 +125,51 @@ redis_getter_data = json.loads(out_str)
  '7f74dffe-db3b-406e-b082-e8653af20c56': ['{"city": "Zachary", "state": "Louisiana", "country": "US", "postCode": "70791"}',
   '2020-08-07 00:48:29.969']}
 ```
-Main script `redis2postgres_insert.py` for communicating with PostGreSQL should be run in the following way:
-``./redis2postgres_insert.py -parallel=[True|False]``
+Also we need a column names specification that could be obtained via calling the following endpoint: 
+```shell script
+import shlex
+cmd = 'curl -i http://65.108.56.136:8003/getReplicaColumns -X POST -d "?replica=sample_us_users"'
+args = shlex.split(cmd)
+process = subprocess.Popen(args, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+stdout, stderr = process.communicate()
 
+out_str = stdout.decode("utf-8").split("content-type: application/json")[-1].strip()
+redis_getter_cols = json.loads(out_str)
+
+['id', 'address', 'inserted_at']
+```
 Next steps are:
-- converting rows to pandas df and perform timestamp casting for columns with string timestamp
+- Converting rows to pandas
+- Find `DateTime` cols in String Notation and cast it to `DateTime` Type
     ```python
-            df = pd.DataFrame.from_dict(redis_getter_data, orient="index", columns=["address", "inserted_at"])
-            df.reset_index(inplace=True)
-            df.rename(columns={"index": "id"}, inplace=True)
-            df['inserted_at'] = df['inserted_at'].apply(lambda x: pd.to_datetime(x))
+        ## Find DateTime col in String Notation and cast it to DateTime Type
+        datetime_cols = []
+        find_datetime = re.compile("\d{4}\-\d{2}\-\d{2}\s*\d{2}\:\d{2}\:\d{2}\.?\d{1,6}?")
+
+        for col in df.columns:
+            touch_df_rec = df[col][df[col].first_valid_index()]
+            try:
+                out = find_datetime.findall(touch_df_rec)
+                if len(out) > 0:
+                    datetime_cols.append(col)
+            except:
+                pass
+  
+        if len(datetime_cols) > 0:
+        for col in datetime_cols:
+            df[col] = df[col].apply(lambda x: pd.to_datetime(x))
     ``` 
-- make type casting between pandas and Postgres
+- Replacing `np.NaT` with `None` (`psycopg2` driver didn't work with `NaT` cells):
+    ```shell script
+            ###########################################################################
+            ## !!!!!!!!!!!!!!!!!!! REPLACING pd.NaT VALUES WITH None!!!!!!!!!!!!!!!!!##
+            ###########################################################################
+            for col in datetime_cols:
+                df[col] = df[col].astype(object).where(df[col].notnull(), None)
+                # df.replace({np.NaN: pd.to_datetime(NAT_SUBST_STR__)}, inplace = True)
+                # df = df.replace({pd.NaT: None}).replace({np.NaN: None})
+    ```
+- *make type casting between pandas and Postgres*
 - create empty table in user defined scheme
 - run batch loading (parallel/nonparallel) using `psycopg2` driver:
     ```python
@@ -103,9 +181,9 @@ Next steps are:
                 loader.db_insert_batch(cur, TBL_NAME, cols_lst, values_list)
                 db.connection.commit()
     ```
-Check that all rows are commited succesully into user-defined scheme:
+Check that all rows are commited successully into user-defined scheme:
 ```python
-root@kcloud-production-user-136-vm-180:~/PostgresSQL# ./redis2postgres_insert.py -parallel=True
+root@2594b01cd3aa:/app# ./redis2postgres_insert.py -table="$TBL0" -parallel=True
 2.9.3 (dt dec pq3 ext lo64)
 ('PostgreSQL 12.10 (Ubuntu 12.10-1.pgdg20.04+1) on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 9.3.0-17ubuntu1~20.04) 9.3.0, 64-bit',)
 [Parallel(n_jobs=5)]: Using backend LokyBackend with 5 concurrent workers.
@@ -124,7 +202,6 @@ Pushed 999 lines
 3  c6b52ccc-76bc-4ae7-a5e3-f755a74293d0  {"city": "Salisbury", "state": "North Carolina... 2020-06-01 23:20:31.093
 4  4438a8eb-9e64-4405-a234-b3cc40a4b25d  {"city": "Lagrange", "state": "US-OUT", "count... 2020-08-15 23:13:51.984
 ```
-
 Send signal to remove all records being successfully fetched and stored in Postgres DB:
 * --> *[POST]*: `/clearRedisCache`
 ```python
@@ -138,15 +215,39 @@ Wait for new data written to Redis cache and repeat all above-mentioned steps ag
 
 ## PostgreSQL monitoring: running Pgadmin on Virtual Server 
 One can try to install pgAdmin in Ubuntu by running the following script: `install_pgadmin.sh`\
-Next step is to configure and establish a connection to PostgreSQL via `pgadmin` GUI under created user: the user that was created at the final steps of Postgres configuration by running command\
-`sudo su - postgres -c "createuser -P -s -e $USER"`\
-After all configuraiton steps are complited one can run some query in Postgres QEditor :
+Next step is to configure and establish a connection to PostgreSQL via `pgadmin` GUI using created `$db_username` and `$db_password`.
+We're talking about the user that was created at the final steps of Postgres configuration by running command\
+`sudo su - postgres -c "createuser -P -s -e $db_username""`\
+After all configuraiton steps are complited one can run some query in Postgres QEditor:
+```sqlite
+SELECT
+    table_schema || '.' || table_name
+FROM
+    information_schema.tables
+WHERE
+    table_type = 'BASE TABLE'
+AND
+    table_schema NOT IN ('pg_catalog', 'information_schema');
+
+SELECT * FROM  avatar_sample
+WHERE recsys_digital_avatar_full_response_dttm > to_timestamp('2021-06-01 00:00:00', 
+														      'YYYY-MM-DD HH24:MI:SS');
+```
 ![pgAdmin](./img/pgadmin.png)
 
-## Serving PostgreSQL Database with REST API:
+# Serving PostgreSQL Database with Dockerized Async REST API:
 He we demonstrate the how to use developed Async CRUD (Create, Read, Update, and Delete) APIs using FastAPI functionality.\
 
-MAIN REST script: ``service.py``
+- `API`:
+    - `Dockerfile` 
+    - `service.py`: MAIN FastAPI async service using `sqlalchemy` methods for communications with `posrgres` 
+    (running under `gunicorn`) 
+    - `run.sh` : bash script to build Docker image and start container 
+
+To see the logs of running docker container just run to following inline command: 
+```sqlite
+docker ps -a | grep -E "sqlalch*" | awk '{print $1}' | xargs watch -n 2 docker logs
+```
 
 Fetch N rows from `sample_us_users` table uploaded at previous steps.
 * --> *[GET]*: `http://65.108.60.87:8003/sample_us_users/?skip=0&take=5`
@@ -198,4 +299,3 @@ json.loads(out_str)
 Finally we used here a `GUNICORN` server for load balancing with 4 workers and 4 threads each with the full support of Graceful Shutdown and Graceful Reload.
 Service side is propotyped on the base of: 
 1. `Uvicorn` as ASGI web server implementation for Python.\
-1. `FastAPI` implementation with `slowapi` `Limiter` to ratelimit API endpoint request in Fastapi application
