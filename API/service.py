@@ -1,4 +1,4 @@
-#! /usr/bin/python3
+#!/usr/bin/python3
 
 from typing import List
 import databases
@@ -11,7 +11,7 @@ import os
 import urllib
 import uvicorn
 
-APP_PORT = 8002
+APP_PORT = os.environ.get("APP_PORT") #8002
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 host_server = os.environ.get('host_server', 'localhost')
