@@ -45,5 +45,3 @@ docker_id="$(docker ps -a | grep -E "pg_image*" | awk '{print $1}' | xargs)"; \
 docker exec -it $docker_id /bin/sh -c "cd /app/; chmod u+x run_pg_server_conf.sh && ./run_pg_server_conf.sh"
 
 #docker exec -it $docker_id /bin/sh -c "cd /app/; chmod u+x redis2postgres_insert.py &&./redis2postgres_insert.py -table=\"$TBL0\" -parallel=True"
-
-#nohup gunicorn --bind 0.0.0.0:8003 -w 4 --threads 4 --timeout $TIMEOUT -k uvicorn.workers.UvicornWorker service:app &
